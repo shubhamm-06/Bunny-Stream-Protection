@@ -1,0 +1,22 @@
+.pb-settings-table {
+    margin-top: 20px;
+}
+.pb-settings-table th {
+    font-weight: 600;
+}
+.pb-settings-table td {
+    vertical-align: middle;
+}
+.pb-settings-table input.regular-text {
+    width: 90%;
+}
+.pb-no-libs {
+    text-align: center;
+    background: #fff;
+}
+.pb-remove-row {
+    color: #a00 !important;
+}
+.pb-remove-row:hover {
+    color: #f00 !important;
+}
