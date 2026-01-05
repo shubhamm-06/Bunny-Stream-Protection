@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name:       Stock Dashboard
- * Description:       Displays finance data dynamically from a secured private GitHub repository.
+ * Plugin Name:       Protect Bunny – By Shubham Singh
+ * Description:       Securely embeds Bunny.net Stream videos using URL Token Authentication (SHA256) and supports multiple libraries.
  * Version:           5.2.25
  * Author:            Shubham Kumar Singh
  * Author URI:        https://github.com/shubhamm-06
@@ -84,19 +84,27 @@ function pb_render_settings_page() {
                         <th>Library Name / Key</th>
                         <th>Library ID</th>
                         <th>Security Key (Pull Zone)</th>
+                        <th>Shortcode Helper</th>
                         <th width="80">Action</th>
                     </tr>
                 </thead>
                 <tbody id="pb-library-rows">
                     <?php if (empty($libraries)): ?>
-                        <tr class="pb-no-libs"><td colspan="5">No libraries added yet. Click "Add Library" to start.</td></tr>
+                        <tr class="pb-no-libs"><td colspan="6">No libraries added yet. Click "Add Library" to start.</td></tr>
                     <?php else: ?>
-                        <?php foreach ($libraries as $key => $data): ?>
+                        <?php foreach ($libraries as $key => $data): 
+                            $shortcode_hint = '[bunny_video video="ID" lib="' . esc_attr($key) . '"]';
+                        ?>
                         <tr>
                             <td><input type="radio" name="default_lib" value="<?php echo esc_attr($key); ?>" <?php checked($default_lib, $key); ?> required></td>
                             <td><input type="text" name="libs[<?php echo esc_attr($key); ?>][key]" value="<?php echo esc_attr($data['key']); ?>" placeholder="e.g. primary" class="regular-text" readonly></td>
                             <td><input type="text" name="libs[<?php echo esc_attr($key); ?>][lib_id]" value="<?php echo esc_attr($data['lib_id']); ?>" placeholder="Library ID" class="regular-text"></td>
                             <td><input type="password" name="libs[<?php echo esc_attr($key); ?>][sec_key]" value="<?php echo esc_attr($data['sec_key']); ?>" placeholder="Security Key" class="regular-text"></td>
+                            <td>
+                                <code class="pb-copy-code" style="cursor: pointer; display: block; padding: 5px; background: #f0f0f0; border: 1px solid #ccc; font-size: 11px;" title="Click to copy">
+                                    <?php echo esc_html($shortcode_hint); ?>
+                                </code>
+                            </td>
                             <td><button type="button" class="button pb-remove-row">Remove</button></td>
                         </tr>
                         <?php endforeach; ?>
@@ -118,8 +126,29 @@ function pb_render_settings_page() {
             <td><input type="text" name="libs[__KEY__][key]" value="" placeholder="e.g. primary" class="regular-text pb-key-input" required></td>
             <td><input type="text" name="libs[__KEY__][lib_id]" value="" placeholder="Library ID" class="regular-text" required></td>
             <td><input type="password" name="libs[__KEY__][sec_key]" value="" placeholder="Security Key" class="regular-text" required></td>
+            <td><small>Save to see shortcode</small></td>
             <td><button type="button" class="button pb-remove-row">Remove</button></td>
         </tr>
+    </script>
+
+    <script type="text/javascript">
+        jQuery(document).ready(function($) {
+            $('.pb-copy-code').on('click', function() {
+                var text = $(this).text().trim();
+                var temp = $("<input>");
+                $("body").append(temp);
+                temp.val(text).select();
+                document.execCommand("copy");
+                temp.remove();
+                
+                var $el = $(this);
+                var originalColor = $el.css('background');
+                $el.css('background', '#c6ffc6').text('Copied!');
+                setTimeout(function() {
+                    $el.css('background', originalColor).text(text);
+                }, 1000);
+            });
+        });
     </script>
     <?php
 }
