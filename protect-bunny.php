@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 
 define('STOCK_DASHBOARD_PLUGIN_VERSION', '5.2.25');
 define('STOCK_DASHBOARD_PLUGIN_URL', plugin_dir_url(__FILE__));
-define('PROTECT_BUNNY_VERSION', '1.0.0');
+define('PROTECT_BUNNY_VERSION', '5.2.25');
 
 /**
  * Register Admin Menu
@@ -38,6 +38,46 @@ function pb_enqueue_admin_assets($hook) {
 
     wp_enqueue_style('pb-admin-css', plugin_dir_url(__FILE__) . 'admin.css', [], PROTECT_BUNNY_VERSION);
     wp_enqueue_script('pb-admin-js', plugin_dir_url(__FILE__) . 'admin.js', ['jquery'], PROTECT_BUNNY_VERSION, true);
+}
+
+/**
+ * Plugin Update Logic (Public GitHub Repo)
+ */
+add_filter('site_transient_update_plugins', 'pb_check_for_update');
+function pb_check_for_update($transient) {
+    if (empty($transient->checked)) {
+        return $transient;
+    }
+
+    $repo_url = 'https://api.github.com/repos/shubhamm-06/protect-bunny/releases/latest'; // Ensure this matches your repo
+    $response = wp_remote_get($repo_url, [
+        'headers' => [
+            'User-Agent' => 'WordPress/' . get_bloginfo('version') . '; ' . get_bloginfo('url')
+        ]
+    ]);
+
+    if (is_wp_error($response)) {
+        return $transient;
+    }
+
+    $release_data = json_decode(wp_remote_retrieve_body($response));
+
+    if (isset($release_data->tag_name)) {
+        $new_version = ltrim($release_data->tag_name, 'v');
+
+        if (version_compare(PROTECT_BUNNY_VERSION, $new_version, '<')) {
+            $plugin_slug = plugin_basename(__FILE__);
+            $obj = new stdClass();
+            $obj->slug = $plugin_slug;
+            $obj->new_version = $new_version;
+            $obj->url = 'https://github.com/shubhamm-06/protect-bunny';
+            $obj->package = $release_data->zipball_url;
+
+            $transient->response[$plugin_slug] = $obj;
+        }
+    }
+
+    return $transient;
 }
 
 /**
@@ -117,6 +157,13 @@ function pb_render_settings_page() {
                 <input type="submit" name="pb_save_libraries" class="button button-primary" value="Save Settings">
             </div>
         </form>
+
+        <hr style="margin-top: 30px;">
+        <div class="pb-update-check">
+            <h3>Check for Updates</h3>
+            <p>Your current version: <strong><?php echo PROTECT_BUNNY_VERSION; ?></strong></p>
+            <a href="<?php echo admin_url('update-core.php?force-check=1'); ?>" class="button">Force Update Check</a>
+        </div>
     </div>
 
     <!-- Row Template -->
