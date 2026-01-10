@@ -1,22 +1,46 @@
-.pb-admin-wrap .pb-section {
+.bunny-stream-admin {
+    max-width: 1200px;
+    margin-top: 20px;
+}
+
+.bunny-card {
     background: #fff;
-    padding: 20px;
-    margin-bottom: 20px;
     border: 1px solid #ccd0d4;
-    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+    padding: 24px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
-.pb-settings-table th { font-weight: 600; background: #f8f9fa; }
-.pb-copy-code {
-    display: block;
-    padding: 6px;
-    background: #f0f0f1;
-    border: 1px dashed #666;
+
+.bunny-card h2 {
+    margin-top: 0;
+    font-size: 1.3rem;
+    color: #1d2327;
+}
+
+#library-rows input.widefat {
+    padding: 8px 12px;
+}
+
+.row-delete {
+    color: #d63638;
     cursor: pointer;
-    font-family: monospace;
-    font-size: 11px;
-    text-align: center;
+    font-size: 20px;
 }
-.pb-copy-code:hover { background: #e2e4e7; }
-.pb-globals .form-table th { width: 220px; }
-.pb-remove-row { color: #d63638 !important; }
-.pb-help-btn { float: right; background: #f0f0f1; }
+
+.row-delete:hover {
+    color: #b32d2e;
+}
+
+.row-copy {
+    color: #2271b1;
+    cursor: pointer;
+    font-size: 20px;
+}
+
+.row-copy:hover {
+    color: #135e96;
+}
+
+.shortcode-display {
+    font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+}

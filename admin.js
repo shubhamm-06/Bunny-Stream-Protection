@@ -1,82 +1,137 @@
-jQuery(document).ready(function($) {
-    const $tbody = $('#pb-library-rows');
-    const template = $('#pb-row-template').html();
+(function($) {
+    'use strict';
 
-    // Add Row
-    $('#pb-add-library').on('click', function() {
-        $('.pb-no-libs').remove();
-        const tempId = 'lib_' + Date.now();
-        const row = template.replace(/__KEY__/g, tempId);
-        $tbody.append(row);
-    });
+    const BunnyAdmin = {
+        init: function() {
+            this.render();
+            this.bind();
+        },
 
-    // Remove Row
-    $tbody.on('click', '.pb-remove-row', function() {
-        if(confirm('Are you sure you want to remove this library?')) {
-            $(this).closest('tr').remove();
-            if ($tbody.children('tr').length === 0) {
-                $tbody.append('<tr class="pb-no-libs"><td colspan="6">No libraries added yet. Click "Add Library" to start.</td></tr>');
+        render: function() {
+            const $body = $('#library-rows');
+            $body.empty();
+            const libs = streamSafeData.settings.libraries || [];
+
+            if (libs.length === 0) {
+                this.addRow();
+            } else {
+                libs.forEach(lib => this.addRow(lib));
             }
-        }
-    });
 
-    // Key Input Sanitization
-    $tbody.on('input', '.pb-key-input', function() {
-        const val = $(this).val().toLowerCase().replace(/[^a-z0-9_]/g, '');
-        $(this).val(val);
-        const $row = $(this).closest('tr');
-        $row.find('input[type="radio"]').val(val);
-        $row.find('input[name*="libs["]').each(function() {
-            $(this).attr('name', $(this).attr('name').replace(/libs\[.*?\]/, 'libs[' + val + ']'));
-        });
-    });
+            $('#global-expiry').val(streamSafeData.settings.expiry || 3600);
+        },
 
-    // Copy Shortcode
-    $(document).on('click', '.pb-copy-code', function() {
-        const text = $(this).text().trim();
-        const temp = $("<input>");
-        $("body").append(temp);
-        temp.val(text).select();
-        document.execCommand("copy");
-        temp.remove();
-        
-        const $el = $(this);
-        const original = $el.text();
-        $el.text('Copied!');
-        setTimeout(() => $el.text(original), 1000);
-    });
+        addRow: function(data = {key: '', id: '', secret: ''}) {
+            const isDefault = data.key && data.key === streamSafeData.settings.default_lib;
+            const displayKey = data.key || 'key';
+            const shortcode = `[bunny_video id="VIDEO_ID" lib="${displayKey}"]`;
+            
+            const html = `
+                <tr class="library-row">
+                    <td style="text-align:center; vertical-align:middle;">
+                        <input type="radio" name="default_lib_radio" value="${data.key}" ${isDefault ? 'checked' : ''}>
+                    </td>
+                    <td><input type="text" class="lib-key widefat" value="${data.key}" placeholder="e.g. primary"></td>
+                    <td><input type="text" class="lib-id widefat" value="${data.id}" placeholder="Library ID"></td>
+                    <td><input type="password" class="lib-secret widefat" value="${data.secret}" placeholder="Secret Key"></td>
+                    <td style="vertical-align:middle;">
+                        <code class="shortcode-display" style="font-size:11px; background:#f0f0f1; padding:4px 8px; border-radius:4px; display:inline-block; border:1px solid #dcdcde;">${shortcode}</code>
+                    </td>
+                    <td style="vertical-align:middle; text-align:center;">
+                        <span class="row-delete dashicons dashicons-trash" title="Remove Library"></span>
+                        <span class="row-copy dashicons dashicons-admin-page" title="Copy Shortcode Helper" style="margin-left:12px;"></span>
+                    </td>
+                </tr>
+            `;
+            $('#library-rows').append(html);
+        },
 
-    // AJAX Check for Update (No Redirect)
-    $('.pb-check-update-btn').on('click', function(e) {
-        e.preventDefault();
-        const $btn = $(this);
-        const originalText = $btn.text();
-        
-        $btn.text('Checking...').prop('disabled', true);
-        
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'pb_force_update_check',
-                nonce: pb_vars.nonce
-            },
-            success: function(response) {
-                if (response.success) {
-                    alert(response.data.message);
-                    if (response.data.update_available) {
-                        window.location.reload(); // Reload to show the update notification if found
-                    }
-                } else {
-                    alert('Error: ' + response.data);
+        bind: function() {
+            const self = this;
+
+            // Add new row button
+            $('#add-library').on('click', () => self.addRow());
+
+            // Sync radio value with key input and update live shortcode display
+            $(document).on('input', '.lib-key', function() {
+                const val = $(this).val();
+                $(this).closest('tr').find('input[name="default_lib_radio"]').val(val);
+                $(this).closest('tr').find('.shortcode-display').text(`[bunny_video id="VIDEO_ID" lib="${val || 'key'}"]`);
+            });
+
+            // Delete row logic
+            $(document).on('click', '.row-delete', function() {
+                if ($('.library-row').length <= 1) {
+                    alert('You must have at least one library configuration.');
+                    return;
                 }
-            },
-            error: function() {
-                alert('Update check failed. Please try again.');
-            },
-            complete: function() {
-                $btn.text(originalText).prop('disabled', false);
-            }
-        });
-    });
-});
+                if (confirm('Are you sure you want to remove this library configuration?')) {
+                    $(this).closest('tr').remove();
+                }
+            });
+
+            // Shortcode copy helper
+            $(document).on('click', '.row-copy', function() {
+                const key = $(this).closest('tr').find('.lib-key').val() || 'LIB_KEY';
+                const sc = `[bunny_video id="VIDEO_ID" lib="${key}"]`;
+                
+                const $temp = $('<input>').val(sc).appendTo('body').select();
+                document.execCommand('copy');
+                $temp.remove();
+                
+                const $btn = $(this);
+                $btn.removeClass('dashicons-admin-page').addClass('dashicons-yes');
+                setTimeout(() => $btn.removeClass('dashicons-yes').addClass('dashicons-admin-page'), 2000);
+            });
+
+            // Save Settings AJAX
+            $('#save-stream-safe').on('click', function() {
+                const $btn = $(this);
+                const libraries = [];
+                
+                $('.library-row').each(function() {
+                    const key = $(this).find('.lib-key').val();
+                    if (key) {
+                        libraries.push({
+                            key: key,
+                            id: $(this).find('.lib-id').val(),
+                            secret: $(this).find('.lib-secret').val()
+                        });
+                    }
+                });
+
+                if (libraries.length === 0) {
+                    alert('Please add at least one library.');
+                    return;
+                }
+
+                const payload = {
+                    action: 'bunny_stream_safe_save_settings',
+                    nonce: streamSafeData.nonce,
+                    libraries: libraries,
+                    default_lib: $('input[name="default_lib_radio"]:checked').val(),
+                    expiry: $('#global-expiry').val()
+                };
+
+                $btn.prop('disabled', true).text('Saving Settings...');
+                
+                $.post(streamSafeData.ajaxUrl, payload, (res) => {
+                    if (res.success) {
+                        $('#save-status').text('Settings saved successfully!')
+                            .css('color', '#46b450')
+                            .fadeIn().delay(3000).fadeOut();
+                    } else {
+                        $('#save-status').text('Error saving settings.')
+                            .css('color', '#dc3232')
+                            .show();
+                    }
+                }).always(() => {
+                    $btn.prop('disabled', false).text('Save All Settings');
+                });
+            });
+        }
+    };
+
+    $(document).ready(() => BunnyAdmin.init());
+
+})(jQuery);
