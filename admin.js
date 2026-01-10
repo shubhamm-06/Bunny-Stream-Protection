@@ -1,22 +1,48 @@
-.pb-admin-wrap .pb-section {
-    background: #fff;
-    padding: 20px;
-    margin-bottom: 20px;
-    border: 1px solid #ccd0d4;
-    box-shadow: 0 1px 1px rgba(0,0,0,.04);
-}
-.pb-settings-table th { font-weight: 600; background: #f8f9fa; }
-.pb-copy-code {
-    display: block;
-    padding: 6px;
-    background: #f0f0f1;
-    border: 1px dashed #666;
-    cursor: pointer;
-    font-family: monospace;
-    font-size: 11px;
-    text-align: center;
-}
-.pb-copy-code:hover { background: #e2e4e7; }
-.pb-globals .form-table th { width: 220px; }
-.pb-remove-row { color: #d63638 !important; }
-.pb-help-btn { float: right; background: #f0f0f1; }
+jQuery(document).ready(function($) {
+    const $tbody = $('#pb-library-rows');
+    const template = $('#pb-row-template').html();
+
+    // Add Row
+    $('#pb-add-library').on('click', function() {
+        $('.pb-no-libs').remove();
+        const tempId = 'lib_' + Date.now();
+        const row = template.replace(/__KEY__/g, tempId);
+        $tbody.append(row);
+    });
+
+    // Remove Row
+    $tbody.on('click', '.pb-remove-row', function() {
+        if(confirm('Are you sure you want to remove this library?')) {
+            $(this).closest('tr').remove();
+            if ($tbody.children('tr').length === 0) {
+                $tbody.append('<tr class="pb-no-libs"><td colspan="6">No libraries added yet. Click "Add Library" to start.</td></tr>');
+            }
+        }
+    });
+
+    // Key Input Sanitization
+    $tbody.on('input', '.pb-key-input', function() {
+        const val = $(this).val().toLowerCase().replace(/[^a-z0-9_]/g, '');
+        $(this).val(val);
+        const $row = $(this).closest('tr');
+        $row.find('input[type="radio"]').val(val);
+        $row.find('input[name*="libs["]').each(function() {
+            $(this).attr('name', $(this).attr('name').replace(/libs\[.*?\]/, 'libs[' + val + ']'));
+        });
+    });
+
+    // Copy Shortcode
+    $(document).on('click', '.pb-copy-code', function() {
+        const text = $(this).text().trim();
+        const temp = $("<input>");
+        $("body").append(temp);
+        temp.val(text).select();
+        document.execCommand("copy");
+        temp.remove();
+        
+        const $el = $(this);
+        const original = $el.text();
+        $el.text('Copied!');
+        setTimeout(() => $el.text(original), 1000);
+    });
+});

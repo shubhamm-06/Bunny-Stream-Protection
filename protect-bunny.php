@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Protect Bunny – By Shubham Singh
  * Description:       Securely embeds Bunny.net Stream videos using URL Token Authentication (SHA256) and supports multiple libraries.
- * Version:           0.1
+ * Version:           0.2
  * Author:            Shubham Kumar Singh
  * Author URI:        https://github.com/shubhamm-06
  */
@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
     exit; // Prevent direct access
 }
 
-define('PROTECT_BUNNY_VERSION', '0.1');
+define('PROTECT_BUNNY_VERSION', '0.2');
 define('PROTECT_BUNNY_PATH', plugin_dir_path(__FILE__));
 define('PROTECT_BUNNY_URL', plugin_dir_url(__FILE__));
 
@@ -90,7 +90,7 @@ function pb_check_for_update($transient) {
 function pb_render_settings_page() {
     if (!current_user_can('manage_options')) return;
 
-    // Handle Force Update Check
+    // Handle Force Update Check (triggered via URL parameter from Plugin Page link)
     if (isset($_GET['force-check']) && $_GET['force-check'] === '1') {
         delete_site_transient('update_plugins');
         echo '<div class="updated"><p>Update cache cleared. WordPress will now re-check the GitHub repository for updates.</p></div>';
@@ -127,16 +127,15 @@ function pb_render_settings_page() {
     $globals = get_option('pb_global_settings', ['token_expiry' => 3600, 'use_cdn' => 'no', 'cdn_hostname' => '']);
     ?>
     <div class="wrap pb-admin-wrap">
-        <h1 style="display: flex; align-items: center; gap: 15px;">
+        <h1 style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
             Protect Bunny Settings 
             <span style="font-size: 12px; background: #eee; padding: 2px 8px; border-radius: 4px; color: #666; font-weight: normal;">v<?php echo PROTECT_BUNNY_VERSION; ?></span>
-            <a href="<?php echo admin_url('options-general.php?page=protect-bunny&force-check=1'); ?>" class="page-title-action">Check for Update</a>
         </h1>
         
         <form method="post" action="">
             <?php wp_nonce_field('pb_action_nonce', 'pb_nonce'); ?>
             
-            <div class="pb-section">
+            <div class="pb-section" style="background: #fff; border: 1px solid #ccd0d4; padding: 20px; margin-bottom: 20px;">
                 <h2>1. Library Configuration</h2>
                 <table class="wp-list-table widefat fixed striped pb-settings-table">
                     <thead>
@@ -159,7 +158,7 @@ function pb_render_settings_page() {
                                 <td><input type="text" name="libs[<?php echo esc_attr($key); ?>][key]" value="<?php echo esc_attr($data['key']); ?>" class="regular-text" readonly></td>
                                 <td><input type="text" name="libs[<?php echo esc_attr($key); ?>][lib_id]" value="<?php echo esc_attr($data['lib_id']); ?>" class="regular-text"></td>
                                 <td><input type="password" name="libs[<?php echo esc_attr($key); ?>][sec_key]" value="<?php echo esc_attr($data['sec_key']); ?>" class="regular-text"></td>
-                                <td><code class="pb-copy-code" title="Click to copy">[bunny_video video="ID" lib="<?php echo esc_attr($key); ?>"]</code></td>
+                                <td><code class="pb-copy-code" title="Click to copy" style="cursor: pointer; display: block; padding: 5px; background: #f0f0f1; border: 1px dashed #999;">[bunny_video video="ID" lib="<?php echo esc_attr($key); ?>"]</code></td>
                                 <td><button type="button" class="button pb-remove-row">Remove</button></td>
                             </tr>
                             <?php endforeach; ?>
@@ -169,14 +168,14 @@ function pb_render_settings_page() {
                 <p><button type="button" id="pb-add-library" class="button">Add Library</button></p>
             </div>
 
-            <div class="pb-section">
+            <div class="pb-section" style="background: #fff; border: 1px solid #ccd0d4; padding: 20px; margin-bottom: 20px;">
                 <h2>2. Global Configuration & Timing</h2>
                 <table class="form-table">
                     <tr>
                         <th scope="row">Default Token Expiry</th>
                         <td>
                             <input type="number" name="pb_expiry" value="<?php echo esc_attr($globals['token_expiry']); ?>" class="small-text"> 
-                            <span class="description">seconds (e.g., 3600 for 1 hour). Controls link validity in the network tab.</span>
+                            <span class="description">seconds (e.g., 3600 for 1 hour). Controls how long the generated URL remains valid.</span>
                         </td>
                     </tr>
                     <tr>
@@ -234,8 +233,11 @@ function pb_video_shortcode($atts) {
     $library = $libraries[$lib_key];
     $video_id = sanitize_text_field($atts['video']);
     $expires = time() + absint($atts['expiry']);
+    
+    // Core Security Logic: SHA256( security_key + video_id + expiry )
     $token = hash('sha256', $library['sec_key'] . $video_id . $expires);
 
+    // Hostname logic: Use custom CDN if enabled globally, otherwise use default
     $host = ($globals['use_cdn'] === 'yes' && !empty($globals['cdn_hostname'])) ? $globals['cdn_hostname'] : 'iframe.mediadelivery.net';
     $embed_url = "https://{$host}/embed/{$library['lib_id']}/{$video_id}?token={$token}&expires={$expires}";
 
