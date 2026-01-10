@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Protect Bunny – By Shubham Singh
  * Description:       Securely embeds Bunny.net Stream videos using URL Token Authentication (SHA256) and supports multiple libraries.
- * Version:           0.1
+ * Version:           0.2
  * Author:            Shubham Kumar Singh
  * Author URI:        https://github.com/shubhamm-06
  */
@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
     exit; // Prevent direct access
 }
 
-define('PROTECT_BUNNY_VERSION', '0.1');
+define('PROTECT_BUNNY_VERSION', '0.2');
 define('PROTECT_BUNNY_PATH', plugin_dir_path(__FILE__));
 define('PROTECT_BUNNY_URL', plugin_dir_url(__FILE__));
 
@@ -47,8 +47,10 @@ add_filter('site_transient_update_plugins', 'pb_check_for_update');
 function pb_check_for_update($transient) {
     if (empty($transient->checked)) return $transient;
 
+    // Pointing to your specific repo
     $repo_url = 'https://api.github.com/repos/shubhamm-06/Bunny-Stream-Protection/releases/latest';
     $response = wp_remote_get($repo_url, [
+        'timeout' => 15,
         'headers' => [
             'User-Agent' => 'WordPress/' . get_bloginfo('version') . '; ' . get_bloginfo('url')
         ]
@@ -78,6 +80,12 @@ function pb_check_for_update($transient) {
 function pb_render_settings_page() {
     if (!current_user_can('manage_options')) return;
 
+    // Force Update Check Handler
+    if (isset($_GET['force-check']) && $_GET['force-check'] === '1') {
+        delete_site_transient('update_plugins');
+        echo '<div class="updated"><p>Update cache cleared. WordPress will check for updates on the next page load.</p></div>';
+    }
+
     // Handle Saving
     if (isset($_POST['pb_save_all']) && check_admin_referer('pb_action_nonce', 'pb_nonce')) {
         // Save Libraries
@@ -95,7 +103,7 @@ function pb_render_settings_page() {
         update_option('pb_libraries', $sanitized_libs);
         update_option('pb_default_lib', sanitize_key($_POST['default_lib'] ?? ''));
 
-        // Save Global Settings
+        // Save Global Config
         $global_settings = [
             'token_expiry' => absint($_POST['pb_expiry'] ?? 3600),
             'use_cdn'      => isset($_POST['pb_use_cdn']) ? 'yes' : 'no',
@@ -111,19 +119,18 @@ function pb_render_settings_page() {
     $globals = get_option('pb_global_settings', ['token_expiry' => 3600, 'use_cdn' => 'no', 'cdn_hostname' => '']);
     ?>
     <div class="wrap pb-admin-wrap">
-        <h1>Protect Bunny Settings</h1>
-        <p>Configure multiple Bunny.net Stream libraries and security parameters.</p>
+        <h1>Protect Bunny Settings <span class="title-count"><?php echo PROTECT_BUNNY_VERSION; ?></span></h1>
         
         <form method="post" action="">
             <?php wp_nonce_field('pb_action_nonce', 'pb_nonce'); ?>
             
             <div class="pb-section">
-                <h2>1. Library Configuration</h2>
+                <h2>Library Configuration</h2>
                 <table class="wp-list-table widefat fixed striped pb-settings-table">
                     <thead>
                         <tr>
                             <th width="50">Default</th>
-                            <th>Library Name / Key</th>
+                            <th>Library Key</th>
                             <th>Library ID</th>
                             <th>Security Key</th>
                             <th>Shortcode Helper</th>
@@ -132,7 +139,7 @@ function pb_render_settings_page() {
                     </thead>
                     <tbody id="pb-library-rows">
                         <?php if (empty($libraries)): ?>
-                            <tr class="pb-no-libs"><td colspan="6">No libraries added yet.</td></tr>
+                            <tr class="pb-no-libs"><td colspan="6">No libraries added yet. Click "Add Library" to start.</td></tr>
                         <?php else: ?>
                             <?php foreach ($libraries as $key => $data): ?>
                             <tr>
@@ -150,14 +157,14 @@ function pb_render_settings_page() {
                 <p><button type="button" id="pb-add-library" class="button">Add Library</button></p>
             </div>
 
-            <div class="pb-section pb-globals">
-                <h2>2. Global Configuration & Timing</h2>
+            <div class="pb-section">
+                <h2>Global Configuration & Timing</h2>
                 <table class="form-table">
                     <tr>
                         <th scope="row">Default Token Expiry</th>
                         <td>
                             <input type="number" name="pb_expiry" value="<?php echo esc_attr($globals['token_expiry']); ?>" class="small-text"> 
-                            <span class="description">seconds (Default: 3600). How long the video link remains valid.</span>
+                            <span class="description">seconds (e.g., 3600 for 1 hour). Controls how long the generated URL is valid.</span>
                         </td>
                     </tr>
                     <tr>
@@ -165,16 +172,16 @@ function pb_render_settings_page() {
                         <td>
                             <label><input type="checkbox" name="pb_use_cdn" value="yes" <?php checked($globals['use_cdn'], 'yes'); ?>> Use Custom CDN Hostname</label>
                             <p><input type="text" name="pb_cdn_hostname" value="<?php echo esc_attr($globals['cdn_hostname']); ?>" placeholder="e.g. video.yourdomain.com" class="regular-text"></p>
-                            <span class="description">If enabled, the iframe will use this hostname instead of <code>iframe.mediadelivery.net</code>.</span>
+                            <p class="description">If enabled, the network tab will show your custom domain. Token and Expiry will be appended automatically.</p>
                         </td>
                     </tr>
                 </table>
             </div>
 
-            <div class="pb-section">
-                <input type="submit" name="pb_save_all" class="button button-primary" value="Save All Settings">
-                <a href="<?php echo admin_url('update-core.php?force-check=1'); ?>" class="button">Force Update Check</a>
-                <a href="#" target="_blank" class="button pb-help-btn">Help & Documentation</a>
+            <div class="pb-submit-zone" style="margin-top: 20px;">
+                <input type="submit" name="pb_save_all" class="button button-primary" value="Save All Changes">
+                <a href="<?php echo admin_url('options-general.php?page=protect-bunny&force-check=1'); ?>" class="button">Check for Update</a>
+                <a href="" target="_blank" class="button pb-help-link">Help & Documentation</a>
             </div>
         </form>
     </div>
@@ -182,7 +189,7 @@ function pb_render_settings_page() {
     <script type="text/template" id="pb-row-template">
         <tr>
             <td><input type="radio" name="default_lib" value="__KEY__" required></td>
-            <td><input type="text" name="libs[__KEY__][key]" value="" placeholder="e.g. primary" class="regular-text pb-key-input" required></td>
+            <td><input type="text" name="libs[__KEY__][key]" value="" placeholder="e.g. main" class="regular-text pb-key-input" required></td>
             <td><input type="text" name="libs[__KEY__][lib_id]" value="" placeholder="Library ID" class="regular-text" required></td>
             <td><input type="password" name="libs[__KEY__][sec_key]" value="" placeholder="Security Key" class="regular-text" required></td>
             <td><small>Save to see shortcode</small></td>
@@ -200,44 +207,36 @@ function pb_video_shortcode($atts) {
     $globals = get_option('pb_global_settings', ['token_expiry' => 3600, 'use_cdn' => 'no', 'cdn_hostname' => '']);
     
     $atts = shortcode_atts([
-        'video'  => '',
-        'lib'    => '',
-        'expiry' => $globals['token_expiry'],
-        'cdn'    => $globals['use_cdn']
+        'video' => '',
+        'lib'   => '',
+        'expiry' => $globals['token_expiry']
     ], $atts, 'bunny_video');
 
-    if (empty($atts['video'])) return '<!-- Bunny Video Error: Missing video ID -->';
+    if (empty($atts['video'])) return '<!-- Bunny Error: Missing Video ID -->';
 
     $libraries = get_option('pb_libraries', []);
     $default_key = get_option('pb_default_lib', '');
     $lib_key = (!empty($atts['lib']) && isset($libraries[$atts['lib']])) ? $atts['lib'] : $default_key;
     
-    if (empty($lib_key) || !isset($libraries[$lib_key])) return '<!-- Bunny Video Error: No library configured -->';
+    if (empty($lib_key) || !isset($libraries[$lib_key])) return '<!-- Bunny Error: Library not found -->';
 
     $library = $libraries[$lib_key];
     $video_id = sanitize_text_field($atts['video']);
     $expires = time() + absint($atts['expiry']);
+    
+    // Exact Token Logic: SHA256( security_key + video_id + expiry )
     $token = hash('sha256', $library['sec_key'] . $video_id . $expires);
 
-    // Determine Hostname
-    $hostname = 'iframe.mediadelivery.net';
-    if ($atts['cdn'] === 'yes' && !empty($globals['cdn_hostname'])) {
-        $hostname = $globals['cdn_hostname'];
-    }
-
+    // Determine Hostname (Default or Custom CDN)
+    $hostname = ($globals['use_cdn'] === 'yes' && !empty($globals['cdn_hostname'])) ? $globals['cdn_hostname'] : 'iframe.mediadelivery.net';
+    
+    // Construct URL with Token and Expiry automatically appended
     $embed_url = "https://{$hostname}/embed/{$library['lib_id']}/{$video_id}?token={$token}&expires={$expires}";
 
-    ob_start();
-    ?>
-    <div class="pb-video-wrapper" style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden; border-radius:8px; background:#000;">
-        <iframe src="<?php echo esc_url($embed_url); ?>" 
-                loading="lazy" 
-                style="position:absolute; top:0; left:0; width:100%; height:100%; border:0;" 
-                allow="autoplay; fullscreen; picture-in-picture; encrypted-media" 
-                allowfullscreen 
-                referrerpolicy="origin">
-        </iframe>
-    </div>
-    <?php
-    return ob_get_clean();
+    return sprintf(
+        '<div class="pb-video-container" style="position:relative;padding-bottom:56.25%%;height:0;overflow:hidden;border-radius:8px;background:#000;">
+            <iframe src="%s" loading="lazy" style="position:absolute;top:0;left:0;width:100%%;height:100%%;border:0;" allow="autoplay;fullscreen;picture-in-picture;encrypted-media" allowfullscreen referrerpolicy="origin"></iframe>
+        </div>',
+        esc_url($embed_url)
+    );
 }
