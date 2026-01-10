@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Protect Bunny – By Shubham Singh
  * Description:       Securely embeds Bunny.net Stream videos using URL Token Authentication (SHA256) and supports multiple libraries.
- * Version:           0.2
+ * Version:           0.1
  * Author:            Shubham Kumar Singh
  * Author URI:        https://github.com/shubhamm-06
  */
@@ -11,9 +11,20 @@ if (!defined('ABSPATH')) {
     exit; // Prevent direct access
 }
 
-define('PROTECT_BUNNY_VERSION', '0.2');
+define('PROTECT_BUNNY_VERSION', '0.1');
 define('PROTECT_BUNNY_PATH', plugin_dir_path(__FILE__));
 define('PROTECT_BUNNY_URL', plugin_dir_url(__FILE__));
+
+/**
+ * Add Action Links to Plugin Page
+ */
+add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'pb_add_plugin_action_links');
+function pb_add_plugin_action_links($links) {
+    $settings_link = '<a href="' . admin_url('options-general.php?page=protect-bunny') . '">Settings</a>';
+    $update_link = '<a href="' . admin_url('options-general.php?page=protect-bunny&force-check=1') . '" style="color: #d63638; font-weight: bold;">Check for Update</a>';
+    array_unshift($links, $settings_link, $update_link);
+    return $links;
+}
 
 /**
  * Register Admin Menu
@@ -47,7 +58,6 @@ add_filter('site_transient_update_plugins', 'pb_check_for_update');
 function pb_check_for_update($transient) {
     if (empty($transient->checked)) return $transient;
 
-    // Pointing to your specific repo
     $repo_url = 'https://api.github.com/repos/shubhamm-06/Bunny-Stream-Protection/releases/latest';
     $response = wp_remote_get($repo_url, [
         'timeout' => 15,
@@ -80,15 +90,14 @@ function pb_check_for_update($transient) {
 function pb_render_settings_page() {
     if (!current_user_can('manage_options')) return;
 
-    // Force Update Check Handler
+    // Handle Force Update Check
     if (isset($_GET['force-check']) && $_GET['force-check'] === '1') {
         delete_site_transient('update_plugins');
-        echo '<div class="updated"><p>Update cache cleared. WordPress will check for updates on the next page load.</p></div>';
+        echo '<div class="updated"><p>Update cache cleared. WordPress will now re-check the GitHub repository for updates.</p></div>';
     }
 
     // Handle Saving
     if (isset($_POST['pb_save_all']) && check_admin_referer('pb_action_nonce', 'pb_nonce')) {
-        // Save Libraries
         $raw_libs = isset($_POST['libs']) ? $_POST['libs'] : [];
         $sanitized_libs = [];
         foreach ($raw_libs as $lib) {
@@ -103,7 +112,6 @@ function pb_render_settings_page() {
         update_option('pb_libraries', $sanitized_libs);
         update_option('pb_default_lib', sanitize_key($_POST['default_lib'] ?? ''));
 
-        // Save Global Config
         $global_settings = [
             'token_expiry' => absint($_POST['pb_expiry'] ?? 3600),
             'use_cdn'      => isset($_POST['pb_use_cdn']) ? 'yes' : 'no',
@@ -119,13 +127,17 @@ function pb_render_settings_page() {
     $globals = get_option('pb_global_settings', ['token_expiry' => 3600, 'use_cdn' => 'no', 'cdn_hostname' => '']);
     ?>
     <div class="wrap pb-admin-wrap">
-        <h1>Protect Bunny Settings <span class="title-count"><?php echo PROTECT_BUNNY_VERSION; ?></span></h1>
+        <h1 style="display: flex; align-items: center; gap: 15px;">
+            Protect Bunny Settings 
+            <span style="font-size: 12px; background: #eee; padding: 2px 8px; border-radius: 4px; color: #666; font-weight: normal;">v<?php echo PROTECT_BUNNY_VERSION; ?></span>
+            <a href="<?php echo admin_url('options-general.php?page=protect-bunny&force-check=1'); ?>" class="page-title-action">Check for Update</a>
+        </h1>
         
         <form method="post" action="">
             <?php wp_nonce_field('pb_action_nonce', 'pb_nonce'); ?>
             
             <div class="pb-section">
-                <h2>Library Configuration</h2>
+                <h2>1. Library Configuration</h2>
                 <table class="wp-list-table widefat fixed striped pb-settings-table">
                     <thead>
                         <tr>
@@ -158,30 +170,29 @@ function pb_render_settings_page() {
             </div>
 
             <div class="pb-section">
-                <h2>Global Configuration & Timing</h2>
+                <h2>2. Global Configuration & Timing</h2>
                 <table class="form-table">
                     <tr>
                         <th scope="row">Default Token Expiry</th>
                         <td>
                             <input type="number" name="pb_expiry" value="<?php echo esc_attr($globals['token_expiry']); ?>" class="small-text"> 
-                            <span class="description">seconds (e.g., 3600 for 1 hour). Controls how long the generated URL is valid.</span>
+                            <span class="description">seconds (e.g., 3600 for 1 hour). Controls link validity in the network tab.</span>
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row">Enable CDN Stream</th>
+                        <th scope="row">CDN Stream Mode</th>
                         <td>
-                            <label><input type="checkbox" name="pb_use_cdn" value="yes" <?php checked($globals['use_cdn'], 'yes'); ?>> Use Custom CDN Hostname</label>
+                            <label><input type="checkbox" name="pb_use_cdn" value="yes" <?php checked($globals['use_cdn'], 'yes'); ?>> Enable Custom Hostname</label>
                             <p><input type="text" name="pb_cdn_hostname" value="<?php echo esc_attr($globals['cdn_hostname']); ?>" placeholder="e.g. video.yourdomain.com" class="regular-text"></p>
-                            <p class="description">If enabled, the network tab will show your custom domain. Token and Expiry will be appended automatically.</p>
+                            <p class="description">When enabled, URLs will use your custom domain. Token and Expiry are automatically handled in the URL query string.</p>
                         </td>
                     </tr>
                 </table>
             </div>
 
-            <div class="pb-submit-zone" style="margin-top: 20px;">
+            <div class="pb-submit-zone" style="margin-top: 20px; display: flex; align-items: center; gap: 10px;">
                 <input type="submit" name="pb_save_all" class="button button-primary" value="Save All Changes">
-                <a href="<?php echo admin_url('options-general.php?page=protect-bunny&force-check=1'); ?>" class="button">Check for Update</a>
-                <a href="" target="_blank" class="button pb-help-link">Help & Documentation</a>
+                <a href="https://github.com/shubhamm-06/Bunny-Stream-Protection" target="_blank" class="button pb-help-link">Help & Documentation</a>
             </div>
         </form>
     </div>
@@ -207,8 +218,8 @@ function pb_video_shortcode($atts) {
     $globals = get_option('pb_global_settings', ['token_expiry' => 3600, 'use_cdn' => 'no', 'cdn_hostname' => '']);
     
     $atts = shortcode_atts([
-        'video' => '',
-        'lib'   => '',
+        'video'  => '',
+        'lib'    => '',
         'expiry' => $globals['token_expiry']
     ], $atts, 'bunny_video');
 
@@ -223,15 +234,10 @@ function pb_video_shortcode($atts) {
     $library = $libraries[$lib_key];
     $video_id = sanitize_text_field($atts['video']);
     $expires = time() + absint($atts['expiry']);
-    
-    // Exact Token Logic: SHA256( security_key + video_id + expiry )
     $token = hash('sha256', $library['sec_key'] . $video_id . $expires);
 
-    // Determine Hostname (Default or Custom CDN)
-    $hostname = ($globals['use_cdn'] === 'yes' && !empty($globals['cdn_hostname'])) ? $globals['cdn_hostname'] : 'iframe.mediadelivery.net';
-    
-    // Construct URL with Token and Expiry automatically appended
-    $embed_url = "https://{$hostname}/embed/{$library['lib_id']}/{$video_id}?token={$token}&expires={$expires}";
+    $host = ($globals['use_cdn'] === 'yes' && !empty($globals['cdn_hostname'])) ? $globals['cdn_hostname'] : 'iframe.mediadelivery.net';
+    $embed_url = "https://{$host}/embed/{$library['lib_id']}/{$video_id}?token={$token}&expires={$expires}";
 
     return sprintf(
         '<div class="pb-video-container" style="position:relative;padding-bottom:56.25%%;height:0;overflow:hidden;border-radius:8px;background:#000;">
