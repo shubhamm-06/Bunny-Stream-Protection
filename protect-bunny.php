@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Bunny Stream Safed
  * Description: Securely embeds Bunny.net media using SHA256 Token Authentication.
- * Version: 1.1.0
- * Author: Senior WordPress Developer
+ * Version: 1.1.1
+ * Author: Shubham Singh
  * Text Domain: bunny-stream-safed
  */
 
@@ -47,7 +47,7 @@ class BunnyStreamSafe {
         if (file_exists($puc_path)) {
             require $puc_path;
             $updateChecker = YahnisElsts\PluginUpdateChecker\V5\PucFactory::buildUpdateChecker(
-                'https://github.com/your-username/bunny-stream-safed/', // Replace with your repository URL
+                'https://github.com/shubhamm-06/Bunny-Stream-Protection', // Replace with your repository URL
                 __FILE__,
                 'bunny-stream-safed'
             );
