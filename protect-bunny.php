@@ -16,13 +16,53 @@ define('PROTECT_BUNNY_PATH', plugin_dir_path(__FILE__));
 define('PROTECT_BUNNY_URL', plugin_dir_url(__FILE__));
 
 /**
+ * Initialize Plugin Update Checker
+ */
+add_action('plugins_loaded', function() {
+    if (file_exists(PROTECT_BUNNY_PATH . 'plugin-update-checker/plugin-update-checker.php')) {
+        require_once PROTECT_BUNNY_PATH . 'plugin-update-checker/plugin-update-checker.php';
+        if (class_exists('YahnisElsts\PluginUpdateChecker\v5\PucFactory')) {
+            $pbUpdateChecker = YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+                'https://github.com/shubhamm-06/Bunny-Stream-Protection',
+                __FILE__,
+                'protect-bunny'
+            );
+            $pbUpdateChecker->setBranch('main');
+            
+            // Store instance for AJAX access
+            $GLOBALS['pb_update_checker'] = $pbUpdateChecker;
+        }
+    }
+});
+
+/**
+ * AJAX Handler for Manual Update Check
+ */
+add_action('wp_ajax_pb_force_update_check', function() {
+    check_ajax_referer('pb_ajax_nonce', 'nonce');
+    
+    if (isset($GLOBALS['pb_update_checker'])) {
+        // Trigger a check
+        $update = $GLOBALS['pb_update_checker']->requestUpdate();
+        $update_available = ($update !== null);
+        
+        wp_send_json_success([
+            'message' => $update_available ? 'A new version is available!' : 'You are running the latest version.',
+            'update_available' => $update_available
+        ]);
+    }
+    
+    wp_send_json_error('Update checker could not be initialized.');
+});
+
+/**
  * Add Action Links to Plugin Page
  */
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'pb_add_plugin_action_links');
 function pb_add_plugin_action_links($links) {
     $settings_link = '<a href="' . admin_url('options-general.php?page=protect-bunny') . '">Settings</a>';
-    $update_link = '<a href="' . admin_url('options-general.php?page=protect-bunny&force-check=1') . '" style="color: #d63638; font-weight: bold;">Check for Update</a>';
-    array_unshift($links, $settings_link, $update_link);
+    $links['update_check'] = '<a href="#" class="pb-check-update-btn" style="color: #d63638; font-weight: bold;">Check for Update</a>';
+    array_unshift($links, $settings_link);
     return $links;
 }
 
@@ -45,43 +85,14 @@ function pb_register_settings_page() {
  */
 add_action('admin_enqueue_scripts', 'pb_enqueue_admin_assets');
 function pb_enqueue_admin_assets($hook) {
-    if ($hook !== 'settings_page_protect-bunny') return;
+    if ($hook !== 'settings_page_protect-bunny' && $hook !== 'plugins.php') return;
 
     wp_enqueue_style('pb-admin-css', PROTECT_BUNNY_URL . 'admin.css', [], PROTECT_BUNNY_VERSION);
     wp_enqueue_script('pb-admin-js', PROTECT_BUNNY_URL . 'admin.js', ['jquery'], PROTECT_BUNNY_VERSION, true);
-}
 
-/**
- * Plugin Update Logic (Public GitHub Repo)
- */
-add_filter('site_transient_update_plugins', 'pb_check_for_update');
-function pb_check_for_update($transient) {
-    if (empty($transient->checked)) return $transient;
-
-    $repo_url = 'https://api.github.com/repos/shubhamm-06/Bunny-Stream-Protection/releases/latest';
-    $response = wp_remote_get($repo_url, [
-        'timeout' => 15,
-        'headers' => [
-            'User-Agent' => 'WordPress/' . get_bloginfo('version') . '; ' . get_bloginfo('url')
-        ]
+    wp_localize_script('pb-admin-js', 'pb_vars', [
+        'nonce' => wp_create_nonce('pb_ajax_nonce')
     ]);
-
-    if (is_wp_error($response)) return $transient;
-
-    $release_data = json_decode(wp_remote_retrieve_body($response));
-    if (isset($release_data->tag_name)) {
-        $new_version = ltrim($release_data->tag_name, 'v');
-        if (version_compare(PROTECT_BUNNY_VERSION, $new_version, '<')) {
-            $plugin_slug = plugin_basename(__FILE__);
-            $obj = new stdClass();
-            $obj->slug = $plugin_slug;
-            $obj->new_version = $new_version;
-            $obj->url = 'https://github.com/shubhamm-06/Bunny-Stream-Protection';
-            $obj->package = $release_data->zipball_url;
-            $transient->response[$plugin_slug] = $obj;
-        }
-    }
-    return $transient;
 }
 
 /**
@@ -89,12 +100,6 @@ function pb_check_for_update($transient) {
  */
 function pb_render_settings_page() {
     if (!current_user_can('manage_options')) return;
-
-    // Handle Force Update Check (triggered via URL parameter from Plugin Page link)
-    if (isset($_GET['force-check']) && $_GET['force-check'] === '1') {
-        delete_site_transient('update_plugins');
-        echo '<div class="updated"><p>Update cache cleared. WordPress will now re-check the GitHub repository for updates.</p></div>';
-    }
 
     // Handle Saving
     if (isset($_POST['pb_save_all']) && check_admin_referer('pb_action_nonce', 'pb_nonce')) {
@@ -130,6 +135,7 @@ function pb_render_settings_page() {
         <h1 style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
             Protect Bunny Settings 
             <span style="font-size: 12px; background: #eee; padding: 2px 8px; border-radius: 4px; color: #666; font-weight: normal;">v<?php echo PROTECT_BUNNY_VERSION; ?></span>
+            <button type="button" class="page-title-action pb-check-update-btn">Check for Update</button>
         </h1>
         
         <form method="post" action="">
@@ -237,7 +243,7 @@ function pb_video_shortcode($atts) {
     // Core Security Logic: SHA256( security_key + video_id + expiry )
     $token = hash('sha256', $library['sec_key'] . $video_id . $expires);
 
-    // Hostname logic: Use custom CDN if enabled globally, otherwise use default
+    // Hostname logic
     $host = ($globals['use_cdn'] === 'yes' && !empty($globals['cdn_hostname'])) ? $globals['cdn_hostname'] : 'iframe.mediadelivery.net';
     $embed_url = "https://{$host}/embed/{$library['lib_id']}/{$video_id}?token={$token}&expires={$expires}";
 

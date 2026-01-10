@@ -45,4 +45,38 @@ jQuery(document).ready(function($) {
         $el.text('Copied!');
         setTimeout(() => $el.text(original), 1000);
     });
+
+    // AJAX Check for Update (No Redirect)
+    $('.pb-check-update-btn').on('click', function(e) {
+        e.preventDefault();
+        const $btn = $(this);
+        const originalText = $btn.text();
+        
+        $btn.text('Checking...').prop('disabled', true);
+        
+        $.ajax({
+            url: ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'pb_force_update_check',
+                nonce: pb_vars.nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    alert(response.data.message);
+                    if (response.data.update_available) {
+                        window.location.reload(); // Reload to show the update notification if found
+                    }
+                } else {
+                    alert('Error: ' + response.data);
+                }
+            },
+            error: function() {
+                alert('Update check failed. Please try again.');
+            },
+            complete: function() {
+                $btn.text(originalText).prop('disabled', false);
+            }
+        });
+    });
 });
